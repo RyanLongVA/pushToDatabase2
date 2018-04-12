@@ -201,6 +201,7 @@ def removeBasedOnPattern(pattern, program):
 def nmapOnDomain(domain, ports):
     #nmap -sS -A example.com --> faster tcp with OS Grepping
     #nmap -sU example.com --> UDP ports
+    pdb.set_trace()
     FNULL = open(os.devnull, 'w')
     portDict = {"full" : "-p-", "fast" : "-F", "normal": "", "simple" : "-p80,8080,8880,2052,2082,2086,2095,443,2053,2083,2087,2096,8443"}
     #portDict['full']
@@ -209,11 +210,10 @@ def nmapOnDomain(domain, ports):
     startOutput = subprocess.call('nmap -sS -sV -oG %s %s %s'%(inputFile, portDict[ports], domain), shell=True, stdout=FNULL)
 
     nmapOut = subprocess.check_output(nmapFormatFolder+'/scanreport.sh -f %s'%(inputFile), shell=True)
-    pdb.set_trace()
     ports = []
-    # ports = nmapOut.split('\n')    
+    portsJSON = {}
     for index, a in enumerate(nmapOut.split('\n')):
-        pdb.set_trace()
+        # Skip the first line "Host: {IP} {Resolved domain}"
         if index != 0:
             tempArray = filter(None, a.split('\t\t'))
             tempArray2 = []
@@ -222,15 +222,34 @@ def nmapOnDomain(domain, ports):
                     next
                 else:
                     tempArray2.append(b)
-            tempArray = tempArray2
+            portData = tempArray2[0].split()
+            portStatus = portData[1]
+            #Check the status of the port
+            if portStatus != 'open':
+                continue
+            portNumber = portData[0]
+            #Check if port number is int type 
+            if not isinstance(int(portNumber), int):
+                continue
+            #Port socket type
+            portType = portData[2]
+            portFingerprint = b.split(' :: ')[1]
+            JSONData[portNumber] = [portType, portFingerprint]
+            pdb.set_trace()
+    pdb.set_trace()
 
-            c = ' :: '.join(tempArray).replace('\t', ' ')
-            if c == '': 
-                print c
-                next
-            else: 
-                ports.append(c)
-    return ' , '.join(ports)
+            
+
+            # portFingerprint = tempArray2[1]
+            # pdb.set_trace()
+            # c = ' :: '.join(tempArray).replace('\t', ' ')
+            # if c == '': 
+            #     print c
+            #     next
+            # else: 
+            #     ports.append(c)
+            # pdb.set_trace()
+    # return ' , '.join(ports)
     # Returns open ports
 
 def grabWebTitle(domain):    
@@ -602,6 +621,7 @@ def main():
     # domainList = []
 
     # def returnJSON(cPorts):
+    #     #Define JSONData 
     #     JSONData = {}
     #     #Null in the database
     #     if cPorts == None:
@@ -612,7 +632,6 @@ def main():
     #     elif cPorts.startswith('{'):
     #         return JSONData
     #     else: 
-    #         #Define JSONData 
     #         portsArray = cPorts.split(' , ')
     #         for b in portsArray: 
     #             try:
@@ -1258,6 +1277,7 @@ def main():
         for a in domainList: 
             try:
                 b = nmapOnDomain(a, ports)
+                pdb.set_trace()
                 cur.execute("UPDATE %s_liveWebApp SET `Ports` = \""%(program)+b+"\" WHERE `Domain` LIKE \'%s\'"%(a))
                 conn.commit()
             except Exception,e:
