@@ -201,42 +201,49 @@ def removeBasedOnPattern(pattern, program):
 def nmapOnDomain(domain, ports):
     #nmap -sS -A example.com --> faster tcp with OS Grepping
     #nmap -sU example.com --> UDP ports
-    pdb.set_trace()
     FNULL = open(os.devnull, 'w')
     portDict = {"full" : "-p-", "fast" : "-F", "normal": "", "simple" : "-p80,8080,8880,2052,2082,2086,2095,443,2053,2083,2087,2096,8443"}
     #portDict['full']
     inputFile = tempFolder+'/nmap.out'
     print 'Starting Nmap on: \t',domain
-    startOutput = subprocess.call('nmap -sS -sV -oG %s %s %s'%(inputFile, portDict[ports], domain), shell=True, stdout=FNULL)
-
-    nmapOut = subprocess.check_output(nmapFormatFolder+'/scanreport.sh -f %s'%(inputFile), shell=True)
-    ports = []
-    portsJSON = {}
-    for index, a in enumerate(nmapOut.split('\n')):
-        # Skip the first line "Host: {IP} {Resolved domain}"
-        if index != 0:
-            tempArray = filter(None, a.split('\t\t'))
-            tempArray2 = []
-            for b in tempArray:
-                if b == '\t':
-                    next
-                else:
-                    tempArray2.append(b)
-            portData = tempArray2[0].split()
-            portStatus = portData[1]
-            #Check the status of the port
-            if portStatus != 'open':
+    ##Try and Except to find where nmap is breaking out... need the function to really return {}
+    try:
+        startOutput = subprocess.call('nmap -sS -sV -oG %s %s %s'%(inputFile, portDict[ports], domain), shell=True, stdout=FNULL)
+        nmapOut = subprocess.check_output(nmapFormatFolder+'/scanreport.sh -f %s'%(inputFile), shell=True)
+        ports = []
+        portsJSON = {}
+        for index, a in enumerate(nmapOut.split('\n')):
+            #If the line is empty continue
+            if a == '':
                 continue
-            portNumber = portData[0]
-            #Check if port number is int type 
-            if not isinstance(int(portNumber), int):
-                continue
-            #Port socket type
-            portType = portData[2]
-            portFingerprint = b.split(' :: ')[1]
-            JSONData[portNumber] = [portType, portFingerprint]
-            pdb.set_trace()
-    pdb.set_trace()
+            # Skip the first line "Host: {IP} {Resolved domain}"
+            if index != 0:
+                tempArray = filter(None, a.split('\t\t'))
+                tempArray2 = []
+                for b in tempArray:
+                    if b == '\t':
+                        next
+                    else:
+                        tempArray2.append(b)
+                portData = tempArray2[0].split()
+                portStatus = portData[1]
+                #Check the status of the port
+                if portStatus != 'open':
+                    continue
+                portNumber = portData[0]
+                #Check if port number is int type 
+                if not isinstance(int(portNumber), int):
+                    continue
+                #Port socket type and Fingerprint
+                portType = portData[2]
+                portFingerprint = ' - '.join(tempArray[1:]).strip('\t')
+                #Moving the information to the JSON array
+                portsJSON[portNumber] = [portType, portFingerprint]
+        return portsJSON
+    except Exception,e:
+        print 'Line 246:'
+        print e
+        pdb.set_trace()
 
             
 
@@ -475,13 +482,16 @@ def checkLiveWebApp(conn, tableName):
         return True
     else:
         try:
-            cur.execute("CREATE TABLE "+tableName+"(Domain VARCHAR(125), `Research Only` TEXT, DNS TEXT, Endpoints TEXT, NS TEXT, Ports TEXT, BuiltWith TEXT, `Content-Security-Policy` TEXT, `X-Frame-Options` TEXT, `X-Xss-Protection` TEXT, `X-Content-Type-Options` TEXT, `Title` TEXT, CONSTRAINT Domains PRIMARY KEY (Domain))")
-            cur.execute("SELECT `Tables` FROM programs WHERE `Name`=\'"+sys.argv[1]+"\'")
+            statem = "CREATE TABLE "+tableName+"(IP VARCHAR(125), Domain VARCHAR(125), `Research Only` TEXT, DNS TEXT, Endpoints TEXT, NS TEXT, Ports TEXT, BuiltWith TEXT, `Content-Security-Policy` TEXT, `X-Frame-Options` TEXT, `X-Xss-Protection` TEXT, `X-Content-Type-Options` TEXT, `Title` TEXT, PRIMARY KEY (IP))"
+            cur.execute(statem)
+            cur.execute("SELECT `Tables` FROM programs WHERE `Name`=\'"+tableName.split('_')[0]+"\'")
             startName = cur.fetchone()[0]
             cur.execute("UPDATE `programs` SET `Tables` = \'"+startname+' , '+tableName+"\' WHERE `Name` LIKE \'"+sys.argv[1]+'\'')
             ####### Table tab isn't updating 
             conn.commit()
-        except:
+        except Exception,e:
+            print e
+            pdb.set_trace()
             pass
     # Seems tables are automatically saved i.e. don't need to be .commit()'d 
 
@@ -614,6 +624,25 @@ def main():
     args = parser.parse_args()
     conn = create_dbConnection()
 
+    #Quick testcase
+    # try:
+    #     b = nmapOnDomain('360.yahoo.com', 'simple')
+    #     cur = conn.cursor()
+    #     cur.execute("SELECT `Ports` FROM %s_liveWebApp WHERE `Domain` LIKE \'%s\'"%('Yahoo', '360.yahoo.com'))
+    #     cPorts = cur.fetchone()[0]
+    #     # if cPorts != '{}':
+    #     #     print 'ports exist\n'
+    #     #     loadedPorts = json.loads(cPorts)
+    #     #     for lPort
+    #     #         pdb.set_trace()
+    #     # else: 
+    #     #     print 'ports do not exist'
+    #     cur.execute("UPDATE %s_liveWebApp SET `Ports` = \""%(program)+json.dumps(b)+"\" WHERE `Domain` LIKE \'%s\'"%(a))
+    #     conn.commit()
+    # except Exception,e:
+    #     print 'Line 1292:\n'
+    #     print e 
+    #     pdb.set_trace()
     #Functional code that shouldn't be run again... it'll take all the json starting with '{' and return None // deleting all the ports data'
     # cur = conn.cursor()
     # cur.execute('SELECT Domain FROM Yahoo_liveWebApp') 
@@ -1277,12 +1306,12 @@ def main():
         for a in domainList: 
             try:
                 b = nmapOnDomain(a, ports)
-                pdb.set_trace()
-                cur.execute("UPDATE %s_liveWebApp SET `Ports` = \""%(program)+b+"\" WHERE `Domain` LIKE \'%s\'"%(a))
+                cur.execute("UPDATE %s_liveWebApp SET `Ports` = \""%(program)+json.dumps(b)+"\" WHERE `Domain` LIKE \'%s\'"%(a))
                 conn.commit()
             except Exception,e:
-                print e                
-                next
+                print 'Line 1292:\n'
+                print e 
+                pdb.set_trace()
         
 
     #     # nmapOnDomain(conn, program, domain, currentValue);
@@ -1366,6 +1395,7 @@ def main():
         inScope = select_webAppFromPrograms(conn, True, args.b)
         outScope = select_webAppFromPrograms(conn, False, args.b)
         checkLiveWebApp(conn, args.b+'_liveWebApp')
+        pdb.set_trace()
         for a in inScope:
             cleanTempFolder()   
             #try:
