@@ -482,7 +482,7 @@ def checkLiveWebApp(conn, tableName):
         return True
     else:
         try:
-            statem = "CREATE TABLE "+tableName+"(IP VARCHAR(125), Domain VARCHAR(125), `Research Only` TEXT, DNS TEXT, Endpoints TEXT, NS TEXT, Ports TEXT, BuiltWith TEXT, `Content-Security-Policy` TEXT, `X-Frame-Options` TEXT, `X-Xss-Protection` TEXT, `X-Content-Type-Options` TEXT, `Title` TEXT, PRIMARY KEY (IP))"
+            statem = "CREATE TABLE "+tableName+"(IP VARCHAR(125), Domains TEXT, `Research Only` TEXT, DNS TEXT, Endpoints TEXT, NS TEXT, Ports TEXT, BuiltWith TEXT, `Content-Security-Policy` TEXT, `X-Frame-Options` TEXT, `X-Xss-Protection` TEXT, `X-Content-Type-Options` TEXT, `Title` TEXT, PRIMARY KEY (IP))"
             cur.execute(statem)
             cur.execute("SELECT `Tables` FROM programs WHERE `Name`=\'"+tableName.split('_')[0]+"\'")
             startName = cur.fetchone()[0]

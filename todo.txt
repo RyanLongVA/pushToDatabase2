@@ -1,0 +1,4 @@
+- IP Primary Key reconstruction 
+	- Next is to reconstruction sending from changes.txt to grab reverse DNS IPs beforehand
+- With IPs we can now scan for virtualhosts within them 
+- ASN Scanning 
