@@ -29,6 +29,7 @@ changesTXTFolder = sys.path[0]+'/lib/data'
 ### MySQL functions
 
 # Grab the value from the changes.txt
+
 def findInOut(a, b):
     ###Returns one of the values with a ^ symbol. Picked/supplied by the b parameter (still needs to end in '^' e.g. 'Domain^')
     for item in a.split(' ; ')[2].split(' , '):
@@ -482,11 +483,15 @@ def checkLiveWebApp(conn, tableName):
         return True
     else:
         try:
-            statem = "CREATE TABLE "+tableName+"(IP VARCHAR(125), Domains TEXT, `Research Only` TEXT, DNS TEXT, Endpoints TEXT, NS TEXT, Ports TEXT, BuiltWith TEXT, `Content-Security-Policy` TEXT, `X-Frame-Options` TEXT, `X-Xss-Protection` TEXT, `X-Content-Type-Options` TEXT, `Title` TEXT, PRIMARY KEY (IP))"
+            statem = "CREATE TABLE "+tableName+"(Domains TEXT, `Research Only` TEXT, DNS TEXT, Endpoints TEXT, NS TEXT, Ports TEXT, BuiltWith TEXT, `Content-Security-Policy` TEXT, `X-Frame-Options` TEXT, `X-Xss-Protection` TEXT, `X-Content-Type-Options` TEXT, `Title` TEXT, PRIMARY KEY (Domains))"
             cur.execute(statem)
             cur.execute("SELECT `Tables` FROM programs WHERE `Name`=\'"+tableName.split('_')[0]+"\'")
-            startName = cur.fetchone()[0]
-            cur.execute("UPDATE `programs` SET `Tables` = \'"+startname+' , '+tableName+"\' WHERE `Name` LIKE \'"+sys.argv[1]+'\'')
+            startname = cur.fetchone()[0]
+            if startname == None: 
+                ## Just add it's first table
+                cur.execute("UPDATE `programs` SET `Tables` = \'"+tableName+"\' WHERE `Name` LIKE \'"+sys.argv[1]+'\'')
+            else:
+                cur.execute("UPDATE `programs` SET `Tables` = \'"+startname+' , '+tableName+"\' WHERE `Name` LIKE \'"+sys.argv[1]+'\'')
             ####### Table tab isn't updating 
             conn.commit()
         except Exception,e:
@@ -606,7 +611,7 @@ def main():
     # parser.add_argument('--title', help='"Program:{check all or just empty}AllOrEmpty')
     parser.add_argument('-r', action='store_true', help='Read Changes.txt')
     parser.add_argument('-cd', help='"Program" Checks and rechecks domains from the program for DNS Records and deletes those that have disappeared')
-    # parser.add_argument('-cc', action='store_true', help='Checks changes.txt\'s domains for DNS Records')
+    parser.add_argument('-cc', action='store_true', help='Checks changes.txt\'s domains for DNS Records')
     # parser.add_argument('-rd', help='"Domain" Remove, based on domain, from changes.txt')
     parser.add_argument('-rk', help='"5CharacterKey" Remove based on key')
     parser.add_argument('-rcp', help='"WordOrPattern:Program" Remove based on a character/ s in domain by program')
@@ -798,38 +803,39 @@ def main():
     #                 statem = 'UPDATE %s_liveWebApp SET `Title` = \"'%(program)+b+'\" WHERE `Domain` LIKE \'%s\''%(a)
     #                 sqlExeCommit(conn, statem)
     #         #Grab only of the value null 
-    # if args.cc:
-    #     domainsList2 = []
-    #     fails2 = []
-    #     cfile = open(changesTXTFolder+'/changes.txt', 'r')
-    #     for a in cfile.readlines():
-    #         domain = findInOut(a, 'Domain^')
-    #         domainsList2.append(domain)
-    #     cfile.close()
-    #     try: 
-    #         socket.gethostbyname('google.com')
-    #     except:
-    #         print 'Internet connect failed'
-    #         exit()
-    #     for a in domainsList2: 
-    #         try: 
-    #             b = socket.gethostbyname(a)
-    #         except Exception,e:
-    #             if e[0] == -2:
-    #                 fails2.append(a)
-    #                 print 'Failed: '+a
-    #                 continue
-    #             else:
-    #                 print e
-    #                 exit()
-    #         if b == '192.168.0.1':
-    #             print 'Failed (locally?): '+a
-    #             fails2.append(a)
-    #         else:
-    #             pass
-    #     ### Now we have a list of changes.txt domains that have failed
-    #     for a in fails2:
-    #         subprocess.call('python '+scriptFolder+'/pushToDatabase.py -rd '+a,shell=True)
+
+    if args.cc:
+        domainsList2 = []
+        fails2 = []
+        cfile = open(changesTXTFolder+'/changes.txt', 'r')
+        for a in cfile.readlines():
+            domain = findInOut(a, 'Domain^')
+            domainsList2.append(domain)
+        cfile.close()
+        try: 
+            socket.gethostbyname('google.com')
+        except:
+            print 'Internet connect failed'
+            exit()
+        for a in domainsList2: 
+            try: 
+                b = socket.gethostbyname(a)
+            except Exception,e:
+                if e[0] == -2:
+                    fails2.append(a)
+                    print 'Failed: '+a
+                    continue
+                else:
+                    print e
+                    exit()
+            if b == '192.168.0.1':
+                print 'Failed (locally?): '+a
+                fails2.append(a)
+            else:
+                pass
+        ### Now we have a list of changes.txt domains that have failed
+        for a in fails2:
+            subprocess.call('python '+scriptFolder+'/pushToDatabase.py -rd '+a,shell=True)
 
     # if args.rd:
     #     removeByDomain(args.rd)
@@ -1395,7 +1401,6 @@ def main():
         inScope = select_webAppFromPrograms(conn, True, args.b)
         outScope = select_webAppFromPrograms(conn, False, args.b)
         checkLiveWebApp(conn, args.b+'_liveWebApp')
-        pdb.set_trace()
         for a in inScope:
             cleanTempFolder()   
             #try:

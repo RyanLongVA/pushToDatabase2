@@ -1,4 +1,5 @@
-- IP Primary Key reconstruction 
-	- Next is to reconstruction sending from changes.txt to grab reverse DNS IPs beforehand
+
 - With IPs we can now scan for virtualhosts within them 
 - ASN Scanning 
+
+- args.g seems to hang too long... make it have console output... and replace the 'sed' command with a python loop of the output
