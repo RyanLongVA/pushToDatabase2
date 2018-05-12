@@ -36,6 +36,7 @@ def findInOut(a, b):
         if item.startswith(b):
             return item.split('^')[1]
 
+
 def domainFound(conn): 
     subprocess.call('python '+scriptFolder+'/pushToDatabase.py -cc', shell=True)
     cur = conn.cursor()
@@ -48,45 +49,49 @@ def domainFound(conn):
     cfile.close()
     if intrusiveStatus:
         for a in domainsList:
-            a = a.split(' , ')
-            program = a[0]
-            domain = a[1]
-            nmapScan = nmapOnDomain(domain, 'normal') ##So far I'm just going to do a normal scan until I can dynamically fluctuate the nmap timeout
-            domainTitle = grabWebTitle(domain)
-            dnsData = grabWebDNS(domain)
-            statementKeys = []
-            statementValues = []
-            # textMessageFormat = []
-            statementKeys.append('`Domain`')
-            statementValues.append('\"'+domain+'\"')
-            # textMessageFormat.append('\n'+'|Domain| '+domain)
-            if domainTitle:
-                statementKeys.append('`Title`')
-                statementValues.append('\"'+domainTitle+'\"')
-                # textMessageFormat.append('|Title|'+domainTitle)
-            if nmapScan:
-                statementKeys.append('`Ports`')
-                statementValues.append('\"'+nmapScan+'\"')
-                # textMessageFormat.append('|Ports|'+nmapScan)
-            if dnsData:
-                statementKeys.append('`DNS`')
-                statementValues.append('\"'+dnsData+'\"')
-                # textMessageFormat.append('|DNS|'+dnsData)
-            fullKeys = ', '.join(statementKeys)
-            fullValues = ', '.join(statementValues)
-            # tempTextMessage = '\n'.join(textMessageFormat)
+            try:
+                a = a.split(' , ')
+                program = a[0]
+                domain = a[1]
+                nmapScan = nmapOnDomain(domain, 'normal') ##So far I'm just going to do a normal scan until I can dynamically fluctuate the nmap timeout
+                domainTitle = grabWebTitle(domain)
+                dnsData = grabWebDNS(domain)
+                statementKeys = []
+                statementValues = []
+                # textMessageFormat = []
+                statementKeys.append('`Domain`')
+                statementValues.append('\"'+domain+'\"')
+                # textMessageFormat.append('\n'+'|Domain| '+domain)
+                if domainTitle:
+                    statementKeys.append('`Title`')
+                    statementValues.append('\"'+domainTitle+'\"')
+                    # textMessageFormat.append('|Title|'+domainTitle)
+                if nmapScan:
+                    statementKeys.append('`Ports`')
+                    statementValues.append('\"'+json.dumps(nmapScan)    +'\"')
+                    # textMessageFormat.append('|Ports|'+nmapScan)
+                if dnsData:
+                    statementKeys.append('`DNS`')
+                    statementValues.append('\"'+dnsData+'\"')
+                    # textMessageFormat.append('|DNS|'+dnsData)
+                fullKeys = ', '.join(statementKeys)
+                fullValues = ', '.join(statementValues)
+                # tempTextMessage = '\n'.join(textMessageFormat)
 
-            #Send text notification
-            # msg = """From: %s
-            # To: %s
-            # Subject:
-            # %s"""%(textEmail, textToAddress, tempTextMessage)
-            # s = smtplib.SMTP('smtp.gmail.com', 587)
-            # s.starttls()
-            # s.login(textEmail, textEmailPassword)
-            # s.sendmail(textEmail, textToAddress, msg)
-            # s.quit()
-            #Insert into table
+                #Send text notification
+                # msg = """From: %s
+                # To: %s
+                # Subject:
+                # %s"""%(textEmail, textToAddress, tempTextMessage)
+                # s = smtplib.SMTP('smtp.gmail.com', 587)
+                # s.starttls()
+                # s.login(textEmail, textEmailPassword)
+                # s.sendmail(textEmail, textToAddress, msg)
+                # s.quit()
+                #Insert into table
+            except Exception,e:
+                pdb.set_trace()
+
             try:
                 statem = "INSERT INTO "+program+"_liveWebApp(%s) VALUES (%s)"%(fullKeys, fullValues)
                 sqlExeCommit(conn, statem)
@@ -502,14 +507,10 @@ def checkLiveWebApp(conn, tableName):
 
 def callGobuster(domain, wordlistPath):
     try:
-        test = "gobuster -fw -m dns -u "+domain+" -t 100 -w "+wordlistPath+" | sed -n -e 's/^Found: //p' > "+tempFolder+'/gobuster.temp'
+        # test = "gobuster -fw -m dns -u "+domain+" -t 100 -w "+wordlistPath+" | sed -n -e 's/^Found: //p' > "+tempFolder+'/gobuster.temp'
+        test = "gobuster -fw -m dns -u "+domain+" -t 100 -v 0-w "+wordlistPath+" | tee "+tempFolder+'/gobuster.temp'
         subprocess.call(test, shell=True)
-        # Because of some weird CNAME results
-        #if (a == 'algolia.net'):
-            #subprocess.call("grep -v '-' ~/arsenal/tempFiles/gobuster.temp > ~/arsenal/tempFiles/gobuster.temp2", shell=True)
-            #subprocess.call("cp ~/arsenal/tempFiles/gobuster.temp2 ~/arsenal/tempFiles/gobuster.temp")
-        # Code for program specific code e.g. Algolia.net needs to have all '-' s stripped b/c they results in random CNAMES
-        b = subprocess.check_output('cat '+tempFolder+'/gobuster.temp', shell=True)
+        b = subprocess.check_output("cat "+tempFolder+"/gobuster.temp | sed -n -e 's/^Found: //p'" , shell=True)
         c = filter(None, b.split('\n'))
         #check what the out of c is... should be a array of new domains
         return c
@@ -612,7 +613,7 @@ def main():
     parser.add_argument('-r', action='store_true', help='Read Changes.txt')
     parser.add_argument('-cd', help='"Program" Checks and rechecks domains from the program for DNS Records and deletes those that have disappeared')
     parser.add_argument('-cc', action='store_true', help='Checks changes.txt\'s domains for DNS Records')
-    # parser.add_argument('-rd', help='"Domain" Remove, based on domain, from changes.txt')
+    parser.add_argument('-rd', help='"Domain" Remove, based on domain, from changes.txt')
     parser.add_argument('-rk', help='"5CharacterKey" Remove based on key')
     parser.add_argument('-rcp', help='"WordOrPattern:Program" Remove based on a character/ s in domain by program')
     parser.add_argument('-t', action="store_true", help='Send text notifications')
@@ -837,9 +838,9 @@ def main():
         for a in fails2:
             subprocess.call('python '+scriptFolder+'/pushToDatabase.py -rd '+a,shell=True)
 
-    # if args.rd:
-    #     removeByDomain(args.rd)
-    #     print 'Removed:',args.rd
+    if args.rd:
+        removeByDomain(args.rd)
+        print 'Removed:',args.rd
 
     # if args.td:
     #     domainsList = filter(None, grabDomainsAndPortsAndDNS(conn, args.td))
@@ -1312,10 +1313,11 @@ def main():
         for a in domainList: 
             try:
                 b = nmapOnDomain(a, ports)
-                cur.execute("UPDATE %s_liveWebApp SET `Ports` = \""%(program)+json.dumps(b)+"\" WHERE `Domain` LIKE \'%s\'"%(a))
+                cState = "UPDATE %s_liveWebApp SET `Ports` = \'"%(program)+json.dumps(b)+"\' WHERE `Domain` LIKE \'%s\'"%(a)
+                cur.execute(cState)
                 conn.commit()
             except Exception,e:
-                print 'Line 1292:\n'
+                print 'Line 1319:\n'
                 print e 
                 pdb.set_trace()
         
@@ -1433,6 +1435,7 @@ def main():
 
     if args.t:
             subprocess.call('python '+textNotesFolder+'/textNotes.py text '+changesTXTFolder+'/changes.txt', shell=True)
+    # Closing off with checking the send file 
 
 # random = ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])
 # 

@@ -1,5 +1,3 @@
 
 - With IPs we can now scan for virtualhosts within them 
 - ASN Scanning 
-
-- args.g seems to hang too long... make it have console output... and replace the 'sed' command with a python loop of the output

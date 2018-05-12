@@ -1,0 +1,94 @@
+-- Revamped Database Layout Creation
+CREATE DATABASE bounties2;
+USE bounties2;
+ 
+
+CREATE TABLE Programs (
+       programId int AUTO_INCREMENT NOT NULL PRIMARY KEY,
+       name varchar(30) NOT NULL,
+       platform varchar(10)
+);
+
+CREATE TABLE Asns (
+        programId int NOT NULL,
+        ASN varchar(10) PRIMARY KEY,
+        ASNPriority int,
+        FOREIGN KEY (programId)
+    		REFERENCES Programs(programId)
+);
+
+ 
+
+CREATE TABLE InScope (
+    	programId INT NOT NULL,
+        domainRange varchar(20),
+        domainRangeId int AUTO_INCREMENT NOT NULL PRIMARY KEY,
+        FOREIGN KEY (programId)
+			REFERENCES Programs(programId)
+);
+
+ 
+
+CREATE TABLE BlacklistedDomains (
+        domainRangeId int NOT NULL,
+        blacklistedContent varchar(30),
+    	FOREIGN KEY (domainRangeId)
+    		REFERENCES InScope(domainRangeId)
+);
+
+ 
+
+CREATE TABLE Domains (
+        domainRangeId int NOT NULL,
+        domainName varchar(50),
+        domainTitle varchar(20),
+        dateFound date NOT NULL,
+        domainId int AUTO_INCREMENT PRIMARY KEY,
+    	FOREIGN KEY (domainRangeId)
+    		REFERENCES InScope(domainRangeId)
+);
+
+ 
+
+CREATE TABLE Ips (
+        domainId int NOT NULL,
+        ipAddress varchar(18) NOT NULL,
+        dateFound date NOT NULL,
+        dateChecked date NOT NULL,
+        dateFailed date,
+        portsTCP text,
+        portsUDP text,
+		FOREIGN KEY (domainId)
+    		REFERENCES Domains(domainId)
+);
+
+ 
+
+CREATE TABLE cnames (
+        domainId int NOT NULL,
+        domainCnamePointer text NOT NULL,
+        ignoreRecord bit NOT NULL DEFAULT 0,
+        domainCnameId int NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		FOREIGN KEY (domainId)
+    		REFERENCES Domains(domainId)
+);
+
+ 
+
+CREATE TABLE cnameIps (
+        domainCnameId int NOT NULL,
+        ipAddress text NOT NULL,
+        dateFound date NOT NULL,
+        dateChecked date NOT NULL,
+        dateFailed date,
+        portsTCP text,
+        portsUDP text,
+    	FOREIGN KEY (domainCnameId)
+    		REFERENCES cnames(domainCnameId)
+);
+
+ 
+
+CREATE TABLE cnameIgnores (
+       scope text NOT NULL
+);
