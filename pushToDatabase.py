@@ -247,6 +247,8 @@ def nmapOnDomain(domain, ports):
                 portsJSON[portNumber] = [portType, portFingerprint]
         return portsJSON
     except Exception,e:
+        if e.message == 'Timer expired':
+            pass
         print 'Line 246:'
         print e
         pdb.set_trace()
@@ -307,7 +309,21 @@ def cleanTempFolder():
         print e
         exit()
 
-
+def sendToChangesTXT(a, tableName, conn):
+    with conn.cursor as cur:
+        cfile = open(changesTXTFolder+'/changes.txt', 'a')
+        for b in a:
+            cur = conn.cursor()
+            statem = "SELECT * FROM "+tableName+" WHERE Domain=\'"+b+"\'"
+            cur.execute(statem)
+            if cur.fetchone():
+                next
+            else:
+                if b not in changesDomains:
+                    print "[+] New Domain Found :",b
+                    key = ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])
+                    cfile.write('bounties ; '+tableName+' ; '+'Domain^'+b+' , Research Only^False ; False ; '+key+'\n')
+        cfile.close()
 
 
 def grabDomainsAndPortsAndDNS(conn, program):
@@ -508,7 +524,7 @@ def checkLiveWebApp(conn, tableName):
 def callGobuster(domain, wordlistPath):
     try:
         # test = "gobuster -fw -m dns -u "+domain+" -t 100 -w "+wordlistPath+" | sed -n -e 's/^Found: //p' > "+tempFolder+'/gobuster.temp'
-        test = "gobuster -fw -m dns -u "+domain+" -t 100 -v 0-w "+wordlistPath+" | tee "+tempFolder+'/gobuster.temp'
+        test = "gobuster -fw -m dns -u "+domain+" -t 100 -v -w "+wordlistPath+" | tee "+tempFolder+'/gobuster.temp'
         subprocess.call(test, shell=True)
         b = subprocess.check_output("cat "+tempFolder+"/gobuster.temp | sed -n -e 's/^Found: //p'" , shell=True)
         c = filter(None, b.split('\n'))
@@ -523,12 +539,32 @@ def mainGobuster(program, filename, conn):
     inScope = select_webAppFromPrograms(conn, True, program)
     outScope = select_webAppFromPrograms(conn, False, program)
     checkLiveWebApp(conn, program+'_liveWebApp')
+    numberOfFoundDomains = 0
+    changesDomains = returnChangesDomains()
     for a in inScope:
         cleanTempFolder()
         if (a[:2] == '*.'):
             a = a[2:]
             b = callGobuster(a, filename)
-            checkLiveWebApp_Domains(conn, program+'_liveWebApp', b, outScope)
+            tableName = program+'_liveWebApp'
+            c = checkLiveWebApp_Domains(conn, tableName, b, outScope)
+            with conn.cursor() as cur:
+                cfile = open(changesTXTFolder+'/changes.txt', 'a')
+                for d in c:
+                    if d in changesDomains:
+                        continue
+                    cur = conn.cursor()
+                    statem = "SELECT * FROM "+tableName+" WHERE Domain=\'"+d+"\'"
+                    cur.execute(statem)
+                    if cur.fetchone():
+                        next
+                    else:
+                        if b not in changesDomains:
+                            numberOfFoundDomains =+ 1
+                            print "[+] New Domain Found :",d
+                            key = ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])
+                            cfile.write('bounties ; '+tableName+' ; '+'Domain^'+d+' , Research Only^False ; False ; '+key+'\n')
+                cfile.close()
         else:
             try: 
                 cur = conn.cursor()
@@ -540,6 +576,7 @@ def mainGobuster(program, filename, conn):
                 else:
                     print e
                     pdb.set_trace()
+    print "Total found: "+str(numberOfFoundDomains)
 
 def returnChangesDomains():
     cfile = open(changesTXTFolder+'/changes.txt', 'r') 
@@ -565,7 +602,6 @@ def checkLiveWebApp_Domains(conn, tableName, domainArray, outScope):
         a = []
     else:
         a = domainArray
-    changesDomains = returnChangesDomains()
     
     for b in outScope:
         #Check outScope value
@@ -582,20 +618,8 @@ def checkLiveWebApp_Domains(conn, tableName, domainArray, outScope):
             for integer, c in reversed(list(enumerate(a))):
                 if c == b:
                     a.pop(integer)
+    return a
 
-    cfile = open(changesTXTFolder+'/changes.txt', 'a')
-    for b in a:
-        cur = conn.cursor()
-        statem = "SELECT * FROM "+tableName+" WHERE Domain=\'"+b+"\'"
-        cur.execute(statem)
-        if cur.fetchone():
-            next
-        else:
-            if b not in changesDomains:
-                print "[+] New Domain Found :",b
-                key = ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])
-                cfile.write('bounties ; '+tableName+' ; '+'Domain^'+b+' , Research Only^False ; False ; '+key+'\n')
-    cfile.close()
 
 def main(): 
     parser = argparse.ArgumentParser(description='databaseActions')
@@ -1307,16 +1331,30 @@ def main():
                 cur.execute('SELECT Ports FROM %s_liveWebApp WHERE Domain=\"%s\"'%(program,a))
                 if cur.fetchone()[0] == None:
                     domainList.append(a)
+        #specific domain
         if domain != '':
             domainList2 = [a for a in domainList if domain in a]
             domainList = domainList2
+        # Begin iteration and scanning
+        notifications = []
         for a in domainList: 
             try:
+                # Get current port info
+                cur.execute('SELECT `Ports` FROM %s_liveWebApp WHERE Domain=\'%s\''%(program,a))
+                currentPortInfo = json.loads(cur.fetchone()[0])
                 b = nmapOnDomain(a, ports)
-                cState = "UPDATE %s_liveWebApp SET `Ports` = \'"%(program)+json.dumps(b)+"\' WHERE `Domain` LIKE \'%s\'"%(a)
-                cur.execute(cState)
-                conn.commit()
-            except Exception,e:
+                # Do the values differ
+                if not currentPortInfo.values() == b.values():
+                    notificationMessage = []
+                    for c in b.keys():
+                        if not b[c] in currentPortInfo.values() or c not in currentPortInfo.keys(): 
+                            notificationMessage.append(c + ' ' + str(b[c]))
+                    with open('log.txt', 'a') as logFile:
+                        logFile.write(a + ' :: '+' // '.join(notificationMessage))
+                    cState = "UPDATE %s_liveWebApp SET `Ports` = \'"%(program)+json.dumps(b)+"\', `Date` = Now() WHERE `Domain` LIKE \'%s\'"%(a)
+                    cur.execute(cState)
+                    conn.commit()
+            except Exception,e: 
                 print 'Line 1319:\n'
                 print e 
                 pdb.set_trace()
